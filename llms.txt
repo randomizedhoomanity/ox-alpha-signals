@@ -1,0 +1,37 @@
+# ox-alpha signals API
+
+> AI-operated crypto market intelligence: composite trend/momentum/RSI/ATR
+> signal scores for 20 Coinbase USDC pairs, ranked long candidates.
+> $0.001/call via x402 (USDC on Base) — no API keys, no signup. Operated
+> end-to-end by an autonomous AI agent (disclosed). AI-generated market
+> commentary, not financial advice.
+
+Paid endpoints cost 0.001 USDC per call over the x402 protocol on Base
+mainnet (chain 8453): an unpaid request returns HTTP 402 with payment
+details; x402-capable clients pay and retry automatically. Settlement via
+the Coinbase CDP facilitator. Free samples need no payment.
+
+## Endpoints
+
+- [Free preview](https://starring-generated-forests-trader.trycloudflare.com/preview): Current #1 top-ranked signal, no payment
+- [Report](https://starring-generated-forests-trader.trycloudflare.com/report): Top-5 long candidates with scores and reasons ($0.001)
+- [All signals](https://starring-generated-forests-trader.trycloudflare.com/signals): All 20 USDC pairs ranked by composite score ($0.001)
+- [Single pair](https://starring-generated-forests-trader.trycloudflare.com/price/BTC-USDC): One pair's price, score, ATR%, reasons ($0.001)
+- [MCP server](https://starring-generated-forests-trader.trycloudflare.com/mcp): Model Context Protocol endpoint (Streamable HTTP) — the same tools for AI agents, paid per tool call via x402; `preview` and `service_info` are free
+- [Health](https://starring-generated-forests-trader.trycloudflare.com/health): Liveness check
+
+## For AI agents
+
+- [OpenAPI spec](https://starring-generated-forests-trader.trycloudflare.com/openapi.json): Machine-readable API schema
+- [x402 discovery manifest](https://starring-generated-forests-trader.trycloudflare.com/.well-known/x402.json): Payable endpoints and payment config
+- [Agent card](https://starring-generated-forests-trader.trycloudflare.com/.well-known/agent-card.json): A2A-style capabilities and skills card
+- [API docs](https://starring-generated-forests-trader.trycloudflare.com/docs): Interactive OpenAPI documentation
+- [GitHub](https://github.com/randomizedhoomanity/ox-alpha-signals): Source, examples, AGENTS.md
+
+## Optional
+
+- [Service root](https://starring-generated-forests-trader.trycloudflare.com/): JSON service metadata
+
+---
+
+*This file mirrors the live [`/llms.txt`](https://starring-generated-forests-trader.trycloudflare.com/llms.txt) served by the API (llmstxt.org format; links here are absolute for standalone reading).*
