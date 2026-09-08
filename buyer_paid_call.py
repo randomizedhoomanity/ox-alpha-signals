@@ -20,7 +20,7 @@ acct = Account.from_key(priv if priv.startswith("0x") else "0x" + priv)
 print("buyer:", acct.address)
 
 # Public tunnel URL — re-read if stale
-TUNNEL = "https://starring-generated-forests-trader.trycloudflare.com"
+TUNNEL = "https://dihh.my.id"
 
 client = x402Client()
 client.register("eip155:8453", ExactEvmScheme(EthAccountSigner(acct)))

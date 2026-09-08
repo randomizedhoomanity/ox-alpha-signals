@@ -46,9 +46,9 @@ PAY_TO = PAYTO["address"]
 NETWORK = "eip155:8453"  # Base mainnet; facilitator settles in native USDC
 FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402"
 FACILITATOR_HOST_CLAIM = "api.cdp.coinbase.com"
-# Public hostname (cloudflared quick tunnel). Stable as long as the tunnel
-# service is never restarted; if it ever changes, update this allowlist entry.
-PUBLIC_HOST = "starring-generated-forests-trader.trycloudflare.com"
+# Public hostname — permanent domain served by the named cloudflared tunnel
+# (ox-tunnel-named). Update the MCP allowlist entry if this ever changes.
+PUBLIC_HOST = "dihh.my.id"
 
 
 class CDPFacilitatorAuth:

@@ -9,10 +9,10 @@ trend (EMA20/EMA50), momentum, RSI and ATR — and exposes its analysis as an
 infrastructure: pay per call in USDC on Base. The same signals are now available to AI
 agents as **paid MCP tools**.
 
-- **Live endpoint:** `https://starring-generated-forests-trader.trycloudflare.com`
+- **Live endpoint:** `https://dihh.my.id`
 - **Price:** $0.001 (0.001 USDC) per call, settled on Base mainnet via the Coinbase CDP facilitator
-- **Free sample:** [`/preview`](https://starring-generated-forests-trader.trycloudflare.com/preview) — current #1 signal, no payment
-- **For LLMs:** [`/llms.txt`](https://starring-generated-forests-trader.trycloudflare.com/llms.txt)
+- **Free sample:** [`/preview`](https://dihh.my.id/preview) — current #1 signal, no payment
+- **For LLMs:** [`/llms.txt`](https://dihh.my.id/llms.txt)
 - **Discovery manifest:** `/.well-known/x402.json` · **Agent card:** `/.well-known/agent-card.json`
 
 ## Endpoints
@@ -41,7 +41,7 @@ client.register("eip155:8453", ExactEvmScheme(EthAccountSigner(acct)))
 
 async def main():
     async with wrapHttpxWithPayment(client) as http:
-        r = await http.get("https://starring-generated-forests-trader.trycloudflare.com/report")
+        r = await http.get("https://dihh.my.id/report")
         print(r.json())  # top-5 long candidates with reasons
 ```
 
@@ -76,10 +76,10 @@ in the loop — which is also how this whole stack is operated.
 
 ## Agent discovery surfaces
 
-- [`/llms.txt`](https://starring-generated-forests-trader.trycloudflare.com/llms.txt) — curated map of the service for LLMs ([llmstxt.org](https://llmstxt.org) format)
-- [`/.well-known/agent-card.json`](https://starring-generated-forests-trader.trycloudflare.com/.well-known/agent-card.json) — A2A-style agent card with per-skill x402 pricing
-- [`/.well-known/x402.json`](https://starring-generated-forests-trader.trycloudflare.com/.well-known/x402.json) — x402 discovery manifest
-- [`/openapi.json`](https://starring-generated-forests-trader.trycloudflare.com/openapi.json) · [`/docs`](https://starring-generated-forests-trader.trycloudflare.com/docs)
+- [`/llms.txt`](https://dihh.my.id/llms.txt) — curated map of the service for LLMs ([llmstxt.org](https://llmstxt.org) format)
+- [`/.well-known/agent-card.json`](https://dihh.my.id/.well-known/agent-card.json) — A2A-style agent card with per-skill x402 pricing
+- [`/.well-known/x402.json`](https://dihh.my.id/.well-known/x402.json) — x402 discovery manifest
+- [`/openapi.json`](https://dihh.my.id/openapi.json) · [`/docs`](https://dihh.my.id/docs)
 - Listed in the **CDP Bazaar** x402 catalog (`/report`, `/signals`, `/price/{pair}` indexed and active)
 
 ## Operator disclosure

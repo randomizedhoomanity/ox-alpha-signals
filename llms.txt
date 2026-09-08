@@ -13,25 +13,25 @@ the Coinbase CDP facilitator. Free samples need no payment.
 
 ## Endpoints
 
-- [Free preview](https://starring-generated-forests-trader.trycloudflare.com/preview): Current #1 top-ranked signal, no payment
-- [Report](https://starring-generated-forests-trader.trycloudflare.com/report): Top-5 long candidates with scores and reasons ($0.001)
-- [All signals](https://starring-generated-forests-trader.trycloudflare.com/signals): All 20 USDC pairs ranked by composite score ($0.001)
-- [Single pair](https://starring-generated-forests-trader.trycloudflare.com/price/BTC-USDC): One pair's price, score, ATR%, reasons ($0.001)
-- [MCP server](https://starring-generated-forests-trader.trycloudflare.com/mcp): Model Context Protocol endpoint (Streamable HTTP) — the same tools for AI agents, paid per tool call via x402; `preview` and `service_info` are free
-- [Health](https://starring-generated-forests-trader.trycloudflare.com/health): Liveness check
+- [Free preview](https://dihh.my.id/preview): Current #1 top-ranked signal, no payment
+- [Report](https://dihh.my.id/report): Top-5 long candidates with scores and reasons ($0.001)
+- [All signals](https://dihh.my.id/signals): All 20 USDC pairs ranked by composite score ($0.001)
+- [Single pair](https://dihh.my.id/price/BTC-USDC): One pair's price, score, ATR%, reasons ($0.001)
+- [MCP server](https://dihh.my.id/mcp): Model Context Protocol endpoint (Streamable HTTP) — the same tools for AI agents, paid per tool call via x402; `preview` and `service_info` are free
+- [Health](https://dihh.my.id/health): Liveness check
 
 ## For AI agents
 
-- [OpenAPI spec](https://starring-generated-forests-trader.trycloudflare.com/openapi.json): Machine-readable API schema
-- [x402 discovery manifest](https://starring-generated-forests-trader.trycloudflare.com/.well-known/x402.json): Payable endpoints and payment config
-- [Agent card](https://starring-generated-forests-trader.trycloudflare.com/.well-known/agent-card.json): A2A-style capabilities and skills card
-- [API docs](https://starring-generated-forests-trader.trycloudflare.com/docs): Interactive OpenAPI documentation
+- [OpenAPI spec](https://dihh.my.id/openapi.json): Machine-readable API schema
+- [x402 discovery manifest](https://dihh.my.id/.well-known/x402.json): Payable endpoints and payment config
+- [Agent card](https://dihh.my.id/.well-known/agent-card.json): A2A-style capabilities and skills card
+- [API docs](https://dihh.my.id/docs): Interactive OpenAPI documentation
 - [GitHub](https://github.com/randomizedhoomanity/ox-alpha-signals): Source, examples, AGENTS.md
 
 ## Optional
 
-- [Service root](https://starring-generated-forests-trader.trycloudflare.com/): JSON service metadata
+- [Service root](https://dihh.my.id/): JSON service metadata
 
 ---
 
-*This file mirrors the live [`/llms.txt`](https://starring-generated-forests-trader.trycloudflare.com/llms.txt) served by the API (llmstxt.org format; links here are absolute for standalone reading).*
+*This file mirrors the live [`/llms.txt`](https://dihh.my.id/llms.txt) served by the API (llmstxt.org format; links here are absolute for standalone reading).*

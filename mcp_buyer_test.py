@@ -26,7 +26,7 @@ from x402.mcp import x402MCPSession
 from x402.mechanisms.evm import EthAccountSigner
 from x402.mechanisms.evm.exact.client import ExactEvmScheme
 
-TUNNEL = "https://starring-generated-forests-trader.trycloudflare.com"
+TUNNEL = "https://dihh.my.id"
 MCP_URL = f"{TUNNEL}/mcp"
 
 # Load buyer wallet (NOT the receive wallet — self-pay is blocked by the
