@@ -52,7 +52,7 @@ _PRICE_DESC = ("Single-pair crypto lookup: price in USDC, composite signal score
 
 
 def build_mcp(*, facilitator_url, auth_provider, pay_to, network, price,
-              get_signals, public_host):
+              get_signals, public_host, extra_hosts=()):
     """Build the FastMCP server with x402-paid tools.
 
     All dependencies are injected (no imports from app.py) — app.py owns the
@@ -110,8 +110,10 @@ def build_mcp(*, facilitator_url, auth_provider, pay_to, network, price,
         # localhost patterns for scratch-port testing.
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
-            allowed_hosts=[public_host, "127.0.0.1:*", "localhost:*", "[::1]:*"],
-            allowed_origins=[f"https://{public_host}"],
+            allowed_hosts=[public_host, *extra_hosts,
+                           "127.0.0.1:*", "localhost:*", "[::1]:*"],
+            allowed_origins=[f"https://{public_host}"]
+                          + [f"https://{h}" for h in extra_hosts],
         ),
     )
     mcp.settings.streamable_http_path = "/"  # public endpoint: POST /mcp

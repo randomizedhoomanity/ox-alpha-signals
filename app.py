@@ -14,15 +14,51 @@ candles) scored with oxtrader.signals.score_product. Cached 10 minutes.
 """
 import json
 import os
+import socket
 import sys
 import threading
 import time
 from contextlib import asynccontextmanager
 
-# ox-trader is the operator's private Coinbase client package (Client().get_candles,
-# score_product, load_key). Point OX_TRADER_HOME at your own copy, or swap the
-# imports for any candle source + scoring function.
-sys.path.insert(0, os.environ.get("OX_TRADER_HOME", "/path/to/ox-trader"))
+sys.path.insert(0, "/home/ryan/ox-trader")
+
+# ------------------------------------------------------------- DNS poisoning
+# The local ISP intercepts DNS and returns block-page A records
+# (36.86.63.185 / internetpositif.id, internetsehatku.com) for Coinbase
+# hosts; the real AAAA records survive. Outbound facilitator verify/settle
+# then lands on the block page and dies with "certificate verify failed:
+# Hostname mismatch". Force the Coinbase hosts onto their real Cloudflare
+# IPv6 addresses at the socket layer — covers sync + async httpx, both
+# facilitator clients, and the candles data client.
+_DNS_PINNED_V6 = {
+    "api.cdp.coinbase.com": ("2606:4700:3030::ac43:be3c",
+                             "2606:4700:3034::6815:13d9"),
+    "api.coinbase.com": ("2606:4700:3030::ac43:be3c",
+                         "2606:4700:3034::6815:13d9"),
+}
+_orig_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv6_getaddrinfo(host, port=0, family=0, type=0, proto=0, flags=0):
+    if host in _DNS_PINNED_V6 and family in (0, socket.AF_UNSPEC,
+                                             socket.AF_INET6):
+        # Prefer a live AAAA lookup if it comes back clean (Cloudflare
+        # prefix), else fall back to the pinned addresses.
+        try:
+            res = _orig_getaddrinfo(host, port, family, type, proto, flags)
+            clean_v6 = [r for r in res if r[0] == socket.AF_INET6
+                        and r[4][0].startswith("2606:4700:")]
+            if clean_v6:
+                return clean_v6
+        except socket.gaierror:
+            pass
+        return [(socket.AF_INET6, type or socket.SOCK_STREAM,
+                 socket.IPPROTO_TCP, "", (ip, port))
+                for ip in _DNS_PINNED_V6[host]]
+    return _orig_getaddrinfo(host, port, family, type, proto, flags)
+
+
+socket.getaddrinfo = _ipv6_getaddrinfo
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -38,16 +74,17 @@ from x402.mechanisms.evm.exact import ExactEvmServerScheme
 
 import mcp_tools
 
-CONFIG = json.load(open(os.environ.get(
-    "OX_TRADER_CONFIG", "/path/to/ox-trader/config.json")))  # needs "universe_watchlist": [pair ids]
-PAYTO = json.load(open(os.path.expanduser(os.environ.get(
-    "X402_PAYTO_FILE", "~/.config/ox-alpha/x402_payto.json"))))  # {"address": "0x..."}
+CONFIG = json.load(open("/home/ryan/ox-trader/config.json"))
+PAYTO = json.load(open(os.path.expanduser(
+    "~/.config/ox-alpha/x402_payto.json")))
 PAY_TO = PAYTO["address"]
 NETWORK = "eip155:8453"  # Base mainnet; facilitator settles in native USDC
 FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402"
 FACILITATOR_HOST_CLAIM = "api.cdp.coinbase.com"
 # Public hostname — permanent domain served by the named cloudflared tunnel
-# (ox-tunnel-named). Update the MCP allowlist entry if this ever changes.
+# (ox-tunnel-named, config ~/.cloudflared/config.yml). The old trycloudflare
+# quick-tunnel URL was decommissioned 2026-09-08 after the Bazaar catalog
+# confirmed the new domain.
 PUBLIC_HOST = "dihh.my.id"
 
 
@@ -202,6 +239,16 @@ def signals():
 
 @app.get("/price/{pair}")
 def price(pair: str):
+    # Agents sometimes call the template literally (/price/:pair or /price/{pair}).
+    # Catch that before the paywall charges them for a meaningless lookup.
+    low = pair.strip().lower()
+    if low in (":pair", "{pair}", "pair", "<pair>", "%3Apair".lower(), "your_pair", "yourpair",
+               "btc-usdc", "e.g._btc-usdc") or "{" in pair or "}" in pair or ":" == pair[:1]:
+        raise HTTPException(
+            status_code=400,
+            detail="Path-parameter error: replace '{pair}' with a Coinbase pair id. "
+                   "Example: GET /price/BTC-USDC (see /preview for a free sample, "
+                   "or the 'price' MCP tool which takes pair as an argument).")
     pair = pair.upper().replace("_", "-")
     if not pair.endswith("-USDC"):
         raise HTTPException(status_code=400, detail="only USDC-quoted pairs supported")
@@ -436,8 +483,40 @@ x402_mw = payment_middleware_from_config(
 )
 
 
+# Agents sometimes request the URL template literally (/price/:pair,
+# /price/{pair}, %3Apair, %7Bpair%7D, "your_pair" ...) instead of a real pair
+# id. The x402 middleware answers 402 before route handlers run, so those
+# callers would pay $0.001 for a guaranteed 400 — price()'s own template
+# catch never fires for unpaid traffic. Answer them here, before the paywall.
+# Uvicorn percent-decodes the request path, so single-encoded variants arrive
+# as ':pair'/'{pair}'; '%3a'/'%7b' left in the decoded segment means the
+# placeholder was double-encoded. "btc-usdc" is deliberately NOT caught here:
+# it is a real pair in the universe, not a placeholder.
+_PLACEHOLDER_PAIRS = ("pair", "<pair>", "your_pair", "yourpair", "e.g._btc-usdc")
+
+
+def _template_pair_call(request: Request) -> bool:
+    """True when the path calls the /price template with no pair substituted."""
+    path = request.url.path
+    if not path.startswith("/price/"):
+        return False
+    seg = path[len("/price/"):].split("/", 1)[0].strip().lower()
+    return bool(seg) and (
+        seg[0] == ":" or "{" in seg or "}" in seg
+        or "%3a" in seg or "%7b" in seg or "%7d" in seg
+        or seg in _PLACEHOLDER_PAIRS)
+
+
 @app.middleware("http")
 async def x402_payment(request: Request, call_next):
+    if _template_pair_call(request):
+        return JSONResponse(status_code=400, content={
+            "error": "path-parameter error",
+            "hint": "Replace '{pair}' with a Coinbase pair id, e.g. GET "
+                    "/price/BTC-USDC. Free sample: GET /preview. The 'price' "
+                    "MCP tool takes pair as an argument.",
+            "example": "/price/BTC-USDC",
+        })
     resp = await x402_mw(request, call_next)
     # Enrich bare 402 bodies with a hint for non-x402 clients
     if resp.status_code == 402 and resp.body in (b"", b"{}", b"null", None):
