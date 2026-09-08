@@ -12,6 +12,8 @@ MCP server:      POST /mcp  (Streamable HTTP — report/signals/price paid,
 Data comes from the ox-trader Coinbase client (authenticated brokerage
 candles) scored with oxtrader.signals.score_product. Cached 10 minutes.
 """
+import asyncio
+import base64
 import json
 import os
 import socket
@@ -37,24 +39,36 @@ _DNS_PINNED_V6 = {
                          "2606:4700:3034::6815:13d9"),
 }
 _orig_getaddrinfo = socket.getaddrinfo
+_DNS_V6_TTL = 600.0  # seconds a live AAAA result is reused
+_dns_v6_cache = {}  # host -> (monotonic ts, [ipv6 addrs])
 
 
 def _ipv6_getaddrinfo(host, port=0, family=0, type=0, proto=0, flags=0):
     if host in _DNS_PINNED_V6 and family in (0, socket.AF_UNSPEC,
                                              socket.AF_INET6):
         # Prefer a live AAAA lookup if it comes back clean (Cloudflare
-        # prefix), else fall back to the pinned addresses.
-        try:
-            res = _orig_getaddrinfo(host, port, family, type, proto, flags)
-            clean_v6 = [r for r in res if r[0] == socket.AF_INET6
+        # prefix), else fall back to the pinned addresses. Live lookups are
+        # cached for _DNS_V6_TTL: under ISP interference a single lookup can
+        # take 10s+, and every fresh facilitator connection would otherwise
+        # pay that again (observed 0.8-12.8s per call).
+        now = time.monotonic()
+        cached = _dns_v6_cache.get(host)
+        ips = cached[1] if cached and now - cached[0] < _DNS_V6_TTL else None
+        if ips is None:
+            try:
+                res = _orig_getaddrinfo(host, port, family, type, proto, flags)
+                live = [r[4][0] for r in res if r[0] == socket.AF_INET6
                         and r[4][0].startswith("2606:4700:")]
-            if clean_v6:
-                return clean_v6
-        except socket.gaierror:
-            pass
+                if live:
+                    ips = live
+                    _dns_v6_cache[host] = (now, live)
+            except socket.gaierror:
+                pass
+            if ips is None:
+                ips = _DNS_PINNED_V6[host]
         return [(socket.AF_INET6, type or socket.SOCK_STREAM,
                  socket.IPPROTO_TCP, "", (ip, port))
-                for ip in _DNS_PINNED_V6[host]]
+                for ip in ips]
     return _orig_getaddrinfo(host, port, family, type, proto, flags)
 
 
@@ -174,9 +188,56 @@ facilitator_auth = CDPFacilitatorAuth()
 facilitator = HTTPFacilitatorClient(FacilitatorConfig(
     url=FACILITATOR_URL, auth_provider=facilitator_auth))
 
+
+def _wrap_facilitator_retries(fc, *, label="facilitator"):
+    """Retry transport-level facilitator failures in-process.
+
+    The ISP's interference doesn't stop at DNS: the outbound facilitator
+    connection itself fails at transport level every so often (2026-09-08
+    flaps: ~1-in-5 fresh connections). The x402 middleware turns a failed
+    verify into a bare 402 whose real reason lives only inside the
+    challenge header, so a paying buyer sees an apparently-unpaid 402 —
+    and an immediate retry succeeds. Do that retry here instead:
+      - verify is a read-only check: retry any httpx transport error.
+      - settle moves funds: retry ONLY httpx.ConnectError (the connection
+        was never established, so the request certainly did not land);
+        timeouts/read errors stay raised to avoid double-settling.
+    Facilitator verdicts (ValueError) are never retried.
+    """
+    import httpx as _httpx
+    import logging as _logging
+    log = _logging.getLogger("uvicorn.error")
+    _orig_verify, _orig_settle = fc.verify, fc.settle
+
+    async def _verify(payload, requirements):
+        for attempt in range(1, 4):
+            try:
+                return await _orig_verify(payload, requirements)
+            except _httpx.HTTPError as e:
+                if attempt == 3:
+                    raise
+                log.warning("[%s] verify transport failure (attempt %d/3): "
+                            "%s: %s", label, attempt, type(e).__name__, e)
+                await asyncio.sleep(0.5)
+
+    async def _settle(payload, requirements):
+        try:
+            return await _orig_settle(payload, requirements)
+        except _httpx.ConnectError as e:
+            log.warning("[%s] settle connect failure, retrying once: %s",
+                        label, e)
+            await asyncio.sleep(0.5)
+            return await _orig_settle(payload, requirements)
+
+    fc.verify, fc.settle = _verify, _settle
+
+
+_wrap_facilitator_retries(facilitator, label="http")
+
 # MCP server (x402-paid tools at /mcp) — built before the app; its session
 # manager runs in the app lifespan (mounted Starlette apps don't run their
-# own lifespans, so it must be wired into the FastAPI lifespan).
+# own lifespans, so it must be wired into the FastAPI lifespan). Shares the
+# (retry-wrapped) facilitator with the HTTP middleware.
 mcp = mcp_tools.build_mcp(
     facilitator_url=FACILITATOR_URL,
     auth_provider=facilitator_auth,
@@ -185,6 +246,7 @@ mcp = mcp_tools.build_mcp(
     price=PRICE,
     get_signals=get_signals,
     public_host=PUBLIC_HOST,
+    facilitator_client=facilitator,
 )
 mcp_app = mcp.streamable_http_app()  # also creates the session manager
 
@@ -241,9 +303,10 @@ def signals():
 def price(pair: str):
     # Agents sometimes call the template literally (/price/:pair or /price/{pair}).
     # Catch that before the paywall charges them for a meaningless lookup.
+    # ("btc-usdc" is NOT listed: it is a real pair id and must stay payable.)
     low = pair.strip().lower()
     if low in (":pair", "{pair}", "pair", "<pair>", "%3Apair".lower(), "your_pair", "yourpair",
-               "btc-usdc", "e.g._btc-usdc") or "{" in pair or "}" in pair or ":" == pair[:1]:
+               "e.g._btc-usdc") or "{" in pair or "}" in pair or ":" == pair[:1]:
         raise HTTPException(
             status_code=400,
             detail="Path-parameter error: replace '{pair}' with a Coinbase pair id. "
@@ -518,13 +581,30 @@ async def x402_payment(request: Request, call_next):
             "example": "/price/BTC-USDC",
         })
     resp = await x402_mw(request, call_next)
-    # Enrich bare 402 bodies with a hint for non-x402 clients
+    # Enrich bare 402 bodies with a hint for non-x402 clients. The x402
+    # middleware puts the REAL failure reason (verify error, requirements
+    # mismatch, ...) only inside the base64 payment-required challenge
+    # header and sends an empty JSON body — decode it so a paid-but-rejected
+    # call is diagnosable instead of looking like a plain paywall.
     if resp.status_code == 402 and resp.body in (b"", b"{}", b"null", None):
         content = {"error": "Payment required",
                    "hint": "Free sample: GET /preview (no payment). "
                            "To pay automatically: use an x402 client with "
                            "USDC on Base — $0.001/call.",
                    "docs": "/docs"}
+        chal = resp.headers.get("payment-required")
+        if chal:
+            try:
+                decoded = json.loads(base64.b64decode(
+                    chal + "=" * (-len(chal) % 4)))
+                err = decoded.get("error")
+                if err and err != "Payment required":
+                    content["error"] = err
+                    content["hint"] = ("The payment could not be verified. "
+                                       "Usually transient — retry the same "
+                                       "request with a fresh payment.")
+            except Exception:
+                pass
         # Preserve ALL original headers (incl. x402 challenge) but fix Content-Length
         headers = {k: v for k, v in resp.headers.items()
                    if k.lower() not in ("content-length", "content-type")}

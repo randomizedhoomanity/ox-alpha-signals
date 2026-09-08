@@ -52,14 +52,21 @@ _PRICE_DESC = ("Single-pair crypto lookup: price in USDC, composite signal score
 
 
 def build_mcp(*, facilitator_url, auth_provider, pay_to, network, price,
-              get_signals, public_host, extra_hosts=()):
+              get_signals, public_host, extra_hosts=(), facilitator_client=None):
     """Build the FastMCP server with x402-paid tools.
 
     All dependencies are injected (no imports from app.py) — app.py owns the
     config constants, the facilitator auth, and the shared signal cache.
+    facilitator_client lets app.py pass its retry-wrapped HTTPFacilitatorClient
+    so both surfaces share one connection pool; when omitted a fresh client is
+    built from facilitator_url + auth_provider.
     """
-    resource_server = x402ResourceServer(HTTPFacilitatorClient(FacilitatorConfig(
-        url=facilitator_url, auth_provider=auth_provider)))
+    if facilitator_client is not None:
+        fc = facilitator_client
+    else:
+        fc = HTTPFacilitatorClient(FacilitatorConfig(
+            url=facilitator_url, auth_provider=auth_provider))
+    resource_server = x402ResourceServer(fc)
     resource_server.register(network, ExactEvmServerScheme())
     resource_server.initialize()
     accepts = resource_server.build_payment_requirements(ResourceConfig(
